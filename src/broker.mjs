@@ -2,59 +2,54 @@
 /**
  * Toolgate broker (MCP server)
  * ----------------------------
- * The production surface. Instead of registering ~20 MCP servers (hundreds of
- * tool schemas) into every agent turn, the agent registers *only Toolgate*,
- * which exposes TWO tiny meta-tools:
+ * The agent registers only Toolgate, which exposes two tools:
  *
- *   find_tools(task)                 -> a small, explained shortlist of tools
- *   run_tool(server, tool, args)     -> proxies the call to the real MCP server
+ *   find_tools(task)              -> a short, explained shortlist of tools
+ *   run_tool(server, tool, args)  -> executes a downstream tool for real
  *
- * Why a broker and not dynamic tool-list swapping? Because Claude Code, Codex,
- * and opencode all load their tool list at session start and do not reliably
- * honor MCP `tools/list_changed` mid-session. A broker keeps the agent's tool
- * list *constant* (two tools) while the shortlist decision happens inside,
- * where we fully control and log it. See docs/02-design.md.
+ * find_tools runs the ranker over a catalog. run_tool forwards to the actual
+ * MCP server via the SDK client pool. The agent's visible tool list stays two
+ * tools wide; the real decision (and the real call) happen inside here, where
+ * they can be logged and overruled.
  *
- * This file is intentionally dependency-light and defensive: if the MCP SDK
- * isn't installed it prints install instructions instead of crashing, so the
- * rest of the repo (ranker + panel) runs with zero setup.
+ * Catalog: uses config/catalog.generated.json if present (run `npm run catalog`
+ * to build it from your real servers), otherwise the bundled sample.
  *
- * Run:  npm install @modelcontextprotocol/sdk  &&  node src/broker.mjs
+ * Run:  npm install @modelcontextprotocol/sdk && node src/broker.mjs
  */
-
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadCatalog } from "./catalog.mjs";
 import { decide } from "./ranker.mjs";
 import { loadBandit } from "./prefs.mjs";
+import { readServers } from "./mcpConfig.mjs";
+import { ClientPool } from "./mcpClients.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
-const catalog = loadCatalog(join(root, "config", "catalog.example.json"));
+
+const generated = join(root, "config", "catalog.generated.json");
+const catalogPath = existsSync(generated) ? generated : join(root, "config", "catalog.example.json");
+const catalog = loadCatalog(catalogPath);
 const config = JSON.parse(readFileSync(join(root, "config", "toolgate.config.json"), "utf8"));
 const bandit = loadBandit(join(root, "config", "learned.json"));
+const pool = new ClientPool(readServers());
 
 async function main() {
-  let Server, StdioServerTransport;
+  let Server, StdioServerTransport, types;
   try {
     ({ Server } = await import("@modelcontextprotocol/sdk/server/index.js"));
     ({ StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js"));
+    types = await import("@modelcontextprotocol/sdk/types.js");
   } catch {
-    console.error(
-      "\n[toolgate] The MCP SDK is not installed, so the live broker can't start.\n" +
-        "Install it with:  npm install @modelcontextprotocol/sdk\n" +
-        "You can still explore the decision engine with:  npm run demo\n"
-    );
+    console.error("\n[toolgate] MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk\n");
     process.exit(1);
   }
+  const { ListToolsRequestSchema, CallToolRequestSchema } = types;
 
-  const server = new Server(
-    { name: "toolgate", version: "0.1.0" },
-    { capabilities: { tools: {} } }
-  );
+  const server = new Server({ name: "toolgate", version: "0.1.0" }, { capabilities: { tools: {} } });
 
-  // Only two tools are ever exposed to the agent.
   const META_TOOLS = [
     {
       name: "find_tools",
@@ -62,34 +57,20 @@ async function main() {
         "Get a short, explained list of the tools worth loading for a task. " +
         "Returns only what earns its place in context, with a reason for each " +
         "pick. Call this before work that may need external tools.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          task: { type: "string", description: "What you are trying to do." },
-        },
-        required: ["task"],
-      },
+      inputSchema: { type: "object", properties: { task: { type: "string", description: "What you are trying to do." } }, required: ["task"] },
     },
     {
       name: "run_tool",
       description:
-        "Invoke one of the tools surfaced by find_tools. Provide the tool's " +
-        "server, name, and arguments.",
+        "Invoke one of the tools surfaced by find_tools. Pass its server, tool " +
+        "name, and arguments; Toolgate forwards the call to that server.",
       inputSchema: {
         type: "object",
-        properties: {
-          server: { type: "string" },
-          tool: { type: "string" },
-          args: { type: "object" },
-        },
+        properties: { server: { type: "string" }, tool: { type: "string" }, args: { type: "object" } },
         required: ["server", "tool"],
       },
     },
   ];
-
-  // Late-bind SDK request schemas without a static import.
-  const types = await import("@modelcontextprotocol/sdk/types.js");
-  const { ListToolsRequestSchema, CallToolRequestSchema } = types;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: META_TOOLS }));
 
@@ -98,51 +79,38 @@ async function main() {
 
     if (name === "find_tools") {
       const record = decide(a.task, catalog, config, {}, bandit);
-      // Return a compact, agent-friendly view + the full record for logging.
       const view = record.chosen.map((c) => ({
         server: c.tool.server,
-        tool: c.tool.name,
+        tool: c.tool.tool || c.tool.name,
         description: c.tool.description,
         why: `fit ${c.fit.toFixed(2)}, ${c.reason}`,
       }));
       return {
-        content: [
-          {
-            type: "text",
-            text:
-              `Loaded ${record.summary.loaded}/${record.summary.total} tools ` +
-              `(saved ${record.summary.pctSaved}% context)` +
-              (record.summary.lowConfidence ? " \u2014 low confidence, widen if needed." : "") +
-              `\n${JSON.stringify(view, null, 2)}`,
-          },
-        ],
+        content: [{
+          type: "text",
+          text:
+            `Loaded ${record.summary.loaded}/${record.summary.total} tools ` +
+            `(saved ${record.summary.pctSaved}% context)` +
+            (record.summary.lowConfidence ? " \u2014 low confidence, widen if needed." : "") +
+            `\nCall run_tool with the server + tool below.\n${JSON.stringify(view, null, 2)}`,
+        }],
       };
     }
 
     if (name === "run_tool") {
-      // In production this dials the downstream MCP server (a connection pool
-      // keyed by server name) and proxies the call. Here we return a stub so
-      // the shape is clear without requiring live servers.
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-              `[toolgate] would proxy ${a.server}.${a.tool} with args ` +
-              `${JSON.stringify(a.args || {})}. Wire real downstream clients here.`,
-          },
-        ],
-      };
+      try {
+        const res = await pool.callTool(a.server, a.tool, a.args || {});
+        return res; // pass the downstream tool's result straight through
+      } catch (e) {
+        return { isError: true, content: [{ type: "text", text: `[toolgate] ${a.server}.${a.tool} failed: ${String(e.message || e)}` }] };
+      }
     }
 
     throw new Error(`Unknown tool: ${name}`);
   });
 
   await server.connect(new StdioServerTransport());
-  console.error("[toolgate] broker running on stdio (find_tools, run_tool)");
+  console.error(`[toolgate] broker on stdio · catalog: ${catalogPath.split("/").pop()} · ${catalog.length} tools`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((e) => { console.error(e); process.exit(1); });

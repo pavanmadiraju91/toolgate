@@ -23,7 +23,9 @@ import { loadBandit } from "./prefs.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 
-const catalog = loadCatalog(join(root, "config", "catalog.example.json"));
+const generated = join(root, "config", "catalog.generated.json");
+const catalogPath = existsSync(generated) ? generated : join(root, "config", "catalog.example.json");
+const catalog = loadCatalog(catalogPath);
 const config = JSON.parse(readFileSync(join(root, "config", "toolgate.config.json"), "utf8"));
 const bandit = loadBandit(join(root, "config", "learned.json")); // empty until you teach it
 

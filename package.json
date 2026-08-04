@@ -10,6 +10,7 @@
   "scripts": {
     "demo": "node src/demo.mjs",
     "learn": "node src/learn.mjs",
+    "catalog": "node src/gen-catalog.mjs",
     "panel": "node src/serve-panel.mjs",
     "broker": "node src/broker.mjs"
   },
@@ -22,6 +23,6 @@
   ],
   "license": "MIT",
   "optionalDependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.30.0"
   }
 }

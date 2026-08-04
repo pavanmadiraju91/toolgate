@@ -61,24 +61,48 @@ The panel is the heart of the project. Each task shows its tools ranked, fit aga
 
 ## Architecture
 
-Agent runners load their tool list once at startup and don't reliably refresh it mid-session, so you can't swap tools in and out on the fly. Toolgate works around that by shipping as a **broker**: an MCP server that exposes only two tools. The agent registers only Toolgate, calls `find_tools(task)` to get the shortlist, then `run_tool(...)` to use anything on it. The visible tool list stays constant while the real decision happens inside, where it can be seen, logged, and overruled.
+Agent runners load their tool list once at startup and don't reliably refresh it mid-session, so you can't swap tools in and out on the fly. Toolgate works around that by shipping as a **broker**: an MCP server that exposes only two tools. The agent registers only Toolgate, calls `find_tools(task)` to get the shortlist, then `run_tool(...)` to use anything on it. `run_tool` forwards to the real downstream server through the MCP SDK's client, so the call actually executes. The visible tool list just stays two tools wide, and the decision (and the call) happen inside, where they can be seen, logged, and overruled.
+
+The catalog isn't hand-written. `npm run catalog` reads your opencode MCP config, connects to each server, and builds the tool list from what they actually advertise (into `config/catalog.generated.json`, which the broker and demo prefer over the bundled sample).
 
 ```
 src/ranker.mjs      the shortlist engine (fit x footprint -> worth -> gate line)
 src/learner.mjs     LinUCB contextual bandit; learns from board/hold feedback
 src/text.mjs        shared tokenizer so the ranker and learner agree on features
 src/broker.mjs      the MCP server: find_tools + run_tool
+src/mcpConfig.mjs   reads your opencode MCP config (source of truth for servers)
+src/mcpClients.mjs  SDK client pool that forwards run_tool to the real servers
+src/gen-catalog.mjs CLI: build the catalog from your servers' live tools/list
 src/prefs.mjs       load/save the learned bandit state
 src/demo.mjs        CLI: run tasks, write a decision record for the panel
 src/learn.mjs       CLI: watch a held tool learn to board itself
 panel/index.html    the legibility and control UI (zero build, served locally)
-config/             a sample tool catalog and the policy (lambda, floors, weights)
+config/             sample catalog + the policy (lambda, floors, weights)
 docs/               the case study: 01-problem, 02-design, 03-eval
 ```
 
+## Connect it to opencode
+
+```bash
+npm install @modelcontextprotocol/sdk   # once
+npm run catalog                          # build the catalog from your servers
+```
+
+Add the broker to `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "toolgate": { "type": "local", "command": ["node", "/absolute/path/to/toolgate/src/broker.mjs"], "enabled": true }
+  }
+}
+```
+
+To actually shrink context, run an agent that carries only Toolgate instead of every server: add an `agent` whose `tools` disable your other MCP prefixes and keep `toolgate*`, then tell it to call `find_tools(task)` before reaching for tools. `run_tool` handles the rest. (Any MCP client works the same way — Codex, Gemini CLI, Claude Code — the config key is just named differently.)
+
 ## Limitations
 
-The default fit score is plain lexical matching so the repo runs with zero setup. It misses synonyms ("design files" doesn't match a Figma tool), and that shows up in the eval. Swapping in real embeddings is a one-function change. Confidence measures how clean the gate cut was, not whether fit got the answer, so it can be confidently wrong. That's exactly why board/hold and the learner are first-class. [`docs/03-eval.md`](docs/03-eval.md) has the numbers, the failure cases, and what I'd do next.
+The default fit score is plain lexical matching so the repo runs with zero setup. It misses synonyms ("design files" doesn't match a Figma tool), and that shows up in the eval. Swapping in real embeddings is a one-function change. Confidence measures how clean the gate cut was, not whether fit got the answer, so it can be confidently wrong. That's exactly why board/hold and the learner are first-class. Catalog generation also depends on each server being reachable at build time; ones that need an app running or interactive auth are skipped with a warning. [`docs/03-eval.md`](docs/03-eval.md) has the numbers, the failure cases, and what I'd do next.
 
 ## Read more
 
