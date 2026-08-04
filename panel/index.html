@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Toolgate — what the agent is cleared to carry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* Light, restrained, data-forward. Deliberately NOT the AI-default look:
+     no indigo/purple gradient, no Inter, no centered hero + twin CTAs, no
+     rounded 3-col card grid. Green earns a place; amber is what it costs. */
+  :root {
+    --paper: #ffffff;
+    --panel: #fbfbfa;
+    --line: #e9e9e6;
+    --line-2: #f0f0ee;
+    --ink: #17181a;
+    --ink-2: #3f4247;
+    --muted: #74777d;
+    --faint: #a6a9af;
+    --fit: #1f8f5f;      /* green — earns its place */
+    --fit-soft: #e4f2ea;
+    --foot: #c2691f;     /* amber — what it costs */
+    --foot-soft: #f6ebdd;
+    --gate: #c9ccce;
+    --danger: #b23b46;
+    --disp: "Hanken Grotesk", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--disp); font-size: 14px; line-height: 1.5; }
+
+  /* masthead — left-aligned, asymmetric, no CTAs */
+  header { max-width: 1000px; margin: 0 auto; padding: 52px 36px 26px; border-bottom: 1px solid var(--line); }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--foot); }
+  h1 { margin: 12px 0 0; font-size: 30px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.12; max-width: 15ch; }
+  .sub { margin: 14px 0 0; color: var(--ink-2); max-width: 60ch; font-size: 15px; }
+  .legend { display: flex; gap: 26px; margin-top: 22px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { width: 22px; height: 4px; border-radius: 2px; }
+  .legend .g i { background: var(--fit); }
+  .legend .a i { background: var(--foot); }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 8px 36px 90px; }
+
+  /* manifest card */
+  .card { border-bottom: 1px solid var(--line); padding: 26px 0; }
+  .top { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: baseline; }
+  .task { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+  .verdict { margin: 8px 0 0; color: var(--muted); font-size: 13.5px; }
+  .verdict b { color: var(--ink); font-weight: 600; }
+  .verdict .save { color: var(--fit); }
+  .counts { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  .counts .big { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .counts .big .sl { color: var(--faint); }
+  .counts .cf { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; margin-top: 6px; color: var(--muted); display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  .counts .cf .seg { display: inline-flex; gap: 2px; }
+  .counts .cf .seg b { width: 10px; height: 4px; background: #e2e2df; border-radius: 1px; }
+  .counts .cf .seg b.on { background: var(--fit); }
+  .counts .cf.low .seg b.on { background: var(--foot); }
+  .counts .cf.low { color: var(--foot); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+  tr.tool td { padding: 9px 0; border-top: 1px solid var(--line-2); vertical-align: middle; }
+  tr.tool.held td { opacity: .55; }
+  td.c-dot { width: 18px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  tr.cleared .dot { background: var(--fit); }
+  tr.held .dot { border: 1.5px solid var(--faint); width: 6px; height: 6px; }
+  td.c-name { width: 34%; }
+  .name { font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--ink); }
+  .server { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 1px; }
+  .desc { color: var(--muted); font-size: 12px; padding-right: 16px; }
+
+  /* the balance: amber footprint pulls left, green fit pulls right */
+  td.c-bal { width: 230px; }
+  .bal { display: grid; grid-template-columns: 30px 1fr 34px; align-items: center; gap: 7px; height: 24px; }
+  .bal .lane { position: relative; height: 16px; }
+  .bal .axis { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--gate); }
+  .bal .foot, .bal .fit { position: absolute; top: 4px; height: 8px; }
+  .bal .foot { right: 50%; background: var(--foot); border-radius: 3px 0 0 3px; }
+  .bal .fit { left: 50%; background: var(--fit); border-radius: 0 3px 3px 0; }
+  .bal .vf, .bal .vt { font-family: var(--mono); font-size: 10px; }
+  .bal .vf { text-align: right; color: var(--foot); }
+  .bal .vt { text-align: left; color: var(--fit); }
+
+  td.c-side { width: 200px; }
+  .side { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+  .why { font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  tr.cleared .why { color: var(--fit); }
+  .why.learned { color: var(--foot); }
+  .acts button { font-family: var(--mono); font-size: 10.5px; cursor: pointer; background: var(--paper);
+    border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 4px 10px; margin-left: 5px; transition: .12s; }
+  .acts button:hover { border-color: var(--muted); color: var(--ink); }
+  .acts button.board.on { color: var(--fit); border-color: var(--fit); background: var(--fit-soft); }
+  .acts button.hold.on { color: var(--danger); border-color: var(--danger); background: #f7e7e8; }
+
+  .gate-row td { padding: 6px 0 2px; }
+  .gate-line { display: flex; align-items: center; gap: 12px; }
+  .gate-line .r { flex: 1; height: 0; border-top: 1.5px dashed var(--gate); }
+  .gate-line .t { font-family: var(--mono); font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: var(--ink); color: #fff;
+    font-family: var(--mono); font-size: 12px; padding: 9px 15px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .bar { position: sticky; top: 0; background: rgba(255,255,255,.9); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    z-index: 5; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 36px; }
+  .bar .lrn { margin-right: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); align-self: center; }
+  .bar button { font-family: var(--mono); font-size: 11px; cursor: pointer; background: var(--paper); border: 1px solid var(--line);
+    color: var(--ink-2); border-radius: 7px; padding: 6px 11px; }
+  .bar button:hover { border-color: var(--muted); }
+  .empty { color: var(--muted); padding: 80px 36px; font-family: var(--mono); }
+  code { font-family: var(--mono); background: var(--panel); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; }
+  footer { max-width: 1000px; margin: 0 auto; padding: 26px 36px 70px; color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span class="lrn" id="lrn">learning: off</span>
+    <button id="reset">reset learning</button>
+    <button id="export">export learned.json</button>
+  </div>
+  <header>
+    <div class="kicker">Tool loadout · weighed at the gate</div>
+    <h1>See what the agent is cleared to carry.</h1>
+    <p class="sub">Connect twenty tool servers and every one rides along in context on every turn — invisibly. Toolgate weighs each tool's <em>fit</em> to the task against the <em>footprint</em> it takes, boards what earns its place, and holds the rest at the gate. Board or hold anything yourself; it learns from what you do.</p>
+    <div class="legend">
+      <span class="a"><i></i>footprint — room in context</span>
+      <span class="g"><i></i>fit — match to the task</span>
+      <span>gate — where boarding stops</span>
+    </div>
+  </header>
+  <main id="root"><div class="empty">Weighing tools… run <code>npm run demo</code> to generate a manifest.</div></main>
+  <footer>A tool boards only when its fit out-pulls its footprint. Board / hold re-weigh the manifest live and teach the learner (a linear contextual bandit) — the same logic the broker runs at runtime.</footer>
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import { Bandit } from "/src/learner.mjs";
+
+const LS_KEY = "toolgate.bandit.v1";
+let bandit = loadBandit();
+function loadBandit() { try { return Bandit.fromJSON(JSON.parse(localStorage.getItem(LS_KEY))); } catch { return new Bandit(); } }
+function saveBandit() { localStorage.setItem(LS_KEY, JSON.stringify(bandit.toJSON())); }
+function lessons() { return Object.keys(bandit.arms).length; }
+
+// gate rule — mirrors src/ranker.mjs, now folding in the bandit's mean + bonus
+function reweigh(cands, cfg, board, hold, task) {
+  const pinned = new Set(board), excl = new Set(hold);
+  const avg = cands.reduce((s, c) => s + c.footprintTotal, 0) / (cands.length || 1);
+  const scored = cands.map(c => {
+    const b = bandit.score(c.name, task);
+    const worth = c.fit - cfg.lambda * (c.footprintTotal / avg) + cfg.gamma * b.mean + cfg.explore * b.bonus;
+    return { ...c, learned: cfg.gamma * b.mean, worth };
+  }).sort((a, b) => {
+    const ap = pinned.has(a.name) ? 1 : 0, bp = pinned.has(b.name) ? 1 : 0;
+    if (ap !== bp) return bp - ap;
+    return b.fit - a.fit;
+  });
+  const out = []; let spent = 0, cutoff = null, firstHeld = null;
+  for (const s of scored) {
+    if (excl.has(s.name)) { out.push({ ...s, cleared: false, why: "held by you" }); continue; }
+    const isPin = pinned.has(s.name);
+    const boarded = out.filter(x => x.cleared).length;
+    const withinMin = boarded < cfg.minTools, overMax = boarded >= cfg.maxTools;
+    const overBudget = spent + s.schemaTokens > cfg.budgetTokens;
+    const weakFit = s.fit < cfg.fitFloor && s.learned <= 0.02;
+    const notWorth = s.worth < cfg.worthFloor;
+    let clear, why;
+    if (isPin) { clear = true; why = "boarded by you"; }
+    else if (overMax) { clear = false; why = "held · gate full"; }
+    else if (withinMin) { clear = true; why = "essential"; }
+    else if (weakFit) { clear = false; why = "held · weak fit"; }
+    else if (overBudget) { clear = false; why = "held · budget"; }
+    else if (notWorth) { clear = false; why = "held · low worth"; }
+    else { clear = true; why = s.learned > 0.02 ? "cleared · learned" : "cleared"; }
+    if (clear) { spent += s.schemaTokens; cutoff = s.worth; out.push({ ...s, cleared: true, why }); }
+    else { if (firstHeld === null) firstHeld = s.worth; out.push({ ...s, cleared: false, why }); }
+  }
+  let conf = 1;
+  if (cutoff != null && firstHeld != null) conf = Math.max(0, Math.min(1, (cutoff - firstHeld) * 6));
+  const all = cands.reduce((a, c) => a + c.schemaTokens, 0);
+  return { rows: out, spent, all, pct: all ? Math.round(((all - spent) / all) * 100) : 0, conf };
+}
+
+function flatten(d) {
+  const seen = new Set();
+  return [...d.chosen, ...d.rejected].map(x => ({
+    name: x.tool.name, server: x.tool.server, description: x.tool.description,
+    fit: x.fit, footprintTotal: x.footprint.total, schemaTokens: x.footprint.schemaTokens,
+  })).filter(c => !seen.has(c.name) && seen.add(c.name));
+}
+
+let DATA = [];
+const state = new Map();
+
+function render() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  document.getElementById("lrn").textContent = lessons() ? `learning: ${lessons()} tools taught` : "learning: off — board/hold to teach";
+  const maxFit = Math.max(...DATA.flatMap(d => [...d.chosen, ...d.rejected].map(x => x.fit)), .001);
+  const maxFoot = Math.max(...DATA.flatMap(d => [...d.chosen, ...d.rejected].map(x => x.footprint.total)), 1);
+
+  DATA.forEach(d => {
+    const cands = flatten(d);
+    if (!state.has(d.task)) state.set(d.task, { board: new Set(d.userOverrides?.pin || []), hold: new Set(d.userOverrides?.exclude || []) });
+    const ov = state.get(d.task);
+    const res = reweigh(cands, d.config, [...ov.board], [...ov.hold], d.task);
+    const boarded = res.rows.filter(r => r.cleared).length;
+    const low = res.conf < 0.35;
+    const segs = Array.from({ length: 5 }, (_, i) => `<b class="${i < Math.round(res.conf*5) ? "on" : ""}"></b>`).join("");
+
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `
+      <div class="top">
+        <div>
+          <p class="task">${esc(d.task)}</p>
+          <p class="verdict">Boarded <b>${boarded}</b> of ${res.rows.length} · <span class="save">saved ${res.pct}% of tool context</span>. ${low ? "Close call — holding a wider set." : "The rest didn't earn the room."}</p>
+        </div>
+        <div class="counts">
+          <div class="big">${boarded}<span class="sl">/${res.rows.length}</span></div>
+          <div class="cf ${low ? "low" : ""}">${low ? "unsure" : "confident"} <span class="seg">${segs}</span></div>
+        </div>
+      </div>
+      <table></table>`;
+    const table = card.querySelector("table");
+
+    // Group boarded first, then held, so the gate divider reads truthfully
+    // (boarding can skip a heavy tool and clear a cheaper one further down).
+    const cleared = res.rows.filter(r => r.cleared);
+    const held = res.rows.filter(r => !r.cleared);
+    const drawRow = (r) => {
+      const tr = table.insertRow(); tr.className = "tool " + (r.cleared ? "cleared" : "held");
+      const fw = Math.max(2, Math.round((r.fit / maxFit) * 46));
+      const kw = Math.max(2, Math.round((r.footprintTotal / maxFoot) * 46));
+      tr.innerHTML = `
+        <td class="c-dot"><div class="dot"></div></td>
+        <td class="c-name"><div class="name">${esc(r.name)}</div><div class="server">${esc(r.server)}</div></td>
+        <td class="desc">${esc(r.description)}</td>
+        <td class="c-bal"><div class="bal">
+          <span class="vf">${Math.round(r.footprintTotal)}</span>
+          <div class="lane"><div class="axis"></div><div class="foot" style="width:${kw}%"></div><div class="fit" style="width:${fw}%"></div></div>
+          <span class="vt">${r.fit.toFixed(2)}</span>
+        </div></td>
+        <td class="c-side"><div class="side">
+          <span class="why ${r.why.includes("learned") ? "learned" : ""}">${esc(r.why)}</span>
+          <div class="acts">
+            <button class="board ${ov.board.has(r.name) ? "on" : ""}" data-a="board" data-n="${escA(r.name)}">board</button>
+            <button class="hold ${ov.hold.has(r.name) ? "on" : ""}" data-a="hold" data-n="${escA(r.name)}">hold</button>
+          </div></div></td>`;
+    };
+    cleared.forEach(drawRow);
+    if (held.length) {
+      const gr = table.insertRow(); gr.className = "gate-row";
+      gr.innerHTML = `<td colspan="5"><div class="gate-line"><span class="t">gate</span><div class="r"></div><span class="t">held below</span></div></td>`;
+    }
+    held.forEach(drawRow);
+
+    table.querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => {
+      const n = btn.dataset.n, a = btn.dataset.a;
+      if (a === "board") {
+        if (ov.board.has(n)) ov.board.delete(n);
+        else { ov.board.add(n); ov.hold.delete(n); bandit.update(n, d.task, 1); toast(`learned: board ${n} for tasks like this`); }
+      } else {
+        if (ov.hold.has(n)) ov.hold.delete(n);
+        else { ov.hold.add(n); ov.board.delete(n); bandit.update(n, d.task, 0); toast(`learned: hold ${n} for tasks like this`); }
+      }
+      saveBandit(); render();
+    }));
+    root.appendChild(card);
+  });
+}
+
+let toastT;
+function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1900); }
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function escA(s){return esc(s).replace(/'/g,"&#39;");}
+
+document.getElementById("reset").addEventListener("click", () => { bandit = new Bandit(); saveBandit(); state.clear(); render(); toast("learning reset"); });
+document.getElementById("export").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(bandit.toJSON(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "learned.json"; a.click();
+});
+
+fetch("/panel/decisions.json").then(r => r.json()).then(d => { DATA = d; render(); }).catch(() =>
+  document.getElementById("root").innerHTML = '<div class="empty">No decisions.json yet. Run <code>npm run demo</code>, then reload.</div>'
+);
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+config/learned.json
+eval/results/
+.env

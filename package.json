@@ -1,0 +1,27 @@
+{
+  "name": "toolgate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A legibility-and-control layer for agent tool acquisition. Makes an LLM agent's decision about which tools to load visible, explained, and overridable.",
+  "bin": {
+    "toolgate": "src/demo.mjs"
+  },
+  "scripts": {
+    "demo": "node src/demo.mjs",
+    "learn": "node src/learn.mjs",
+    "panel": "node src/serve-panel.mjs",
+    "broker": "node src/broker.mjs"
+  },
+  "keywords": [
+    "human-agent-interaction",
+    "agent-legibility",
+    "mcp",
+    "tool-selection",
+    "ux"
+  ],
+  "license": "MIT",
+  "optionalDependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

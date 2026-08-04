@@ -1,0 +1,15 @@
+{
+  "$comment": "Toolgate policy. lambda = how hard a tool's context footprint counts against it (higher = shorter shortlist). worthFloor = minimum worth (fit - lambda*normFootprint) to keep a tool. budgetTokens = hard cap on schema tokens. weights turn latency (seconds) and risk (0..1) into footprint units. Tune lambda from your own session logs (see docs/03-eval.md).",
+  "lambda": 0.13,
+  "worthFloor": 0.02,
+  "fitFloor": 0.18,
+  "gamma": 0.4,
+  "explore": 0.03,
+  "budgetTokens": 900,
+  "minTools": 1,
+  "maxTools": 6,
+  "weights": {
+    "latency": 0.08,
+    "risk": 18
+  }
+}
