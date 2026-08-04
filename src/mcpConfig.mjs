@@ -25,10 +25,11 @@ export function readServers(path = findConfigPath()) {
   const cfg = JSON.parse(readFileSync(path, "utf8"));
   const out = {};
   for (const [name, s] of Object.entries(cfg.mcp || {})) {
-    if (s.enabled === false) continue;
+    // Note: we intentionally do NOT skip servers marked `enabled: false`.
+    // Daily-drive mode disables them for opencode (so only Toolgate connects),
+    // but Toolgate still needs their definitions to broker them via run_tool.
     if (/toolgate/i.test(name)) continue; // never broker ourselves
     if (s.type === "local" && Array.isArray(s.command)) {
-      // skip our own broker if it's wired in as a local command
       if (s.command.join(" ").includes("toolgate")) continue;
       out[name] = { name, type: "local", command: s.command[0], args: s.command.slice(1), env: s.environment || {} };
     } else if (s.type === "remote" && s.url) {

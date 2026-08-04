@@ -84,6 +84,7 @@ async function main() {
         tool: c.tool.tool || c.tool.name,
         description: c.tool.description,
         why: `fit ${c.fit.toFixed(2)}, ${c.reason}`,
+        arguments: c.tool.schema || {},
       }));
       return {
         content: [{
@@ -92,7 +93,7 @@ async function main() {
             `Loaded ${record.summary.loaded}/${record.summary.total} tools ` +
             `(saved ${record.summary.pctSaved}% context)` +
             (record.summary.lowConfidence ? " \u2014 low confidence, widen if needed." : "") +
-            `\nCall run_tool with the server + tool below.\n${JSON.stringify(view, null, 2)}`,
+            `\nTo use one, call run_tool with its server, tool, and args matching "arguments" below.\n${JSON.stringify(view, null, 2)}`,
         }],
       };
     }
