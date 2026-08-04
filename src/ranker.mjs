@@ -117,11 +117,13 @@ export function decide(task, catalog, overrides = {}, userOverrides = {}, bandit
     return { ...x, worth };
   });
 
-  // 2. Rank best-fit first; pinned tools jump the queue.
+  // 2. Rank by worth (fit adjusted for footprint and what the learner knows),
+  //    so board/hold can actually reorder — a broad but wrong tool that merely
+  //    has high raw fit gets demoted once you've held it. Pinned tools jump the queue.
   scored.sort((a, b) => {
     const ap = pinned.has(a.tool.name) ? 1 : 0, bp = pinned.has(b.tool.name) ? 1 : 0;
     if (ap !== bp) return bp - ap;
-    return b.fit - a.fit;
+    return b.worth - a.worth;
   });
 
   // 3. Walk the ranking and find the gate line.

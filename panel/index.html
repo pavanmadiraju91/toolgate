@@ -157,7 +157,7 @@ function reweigh(cands, cfg, board, hold, task) {
   }).sort((a, b) => {
     const ap = pinned.has(a.name) ? 1 : 0, bp = pinned.has(b.name) ? 1 : 0;
     if (ap !== bp) return bp - ap;
-    return b.fit - a.fit;
+    return b.worth - a.worth;
   });
   const out = []; let spent = 0, cutoff = null, firstHeld = null;
   for (const s of scored) {

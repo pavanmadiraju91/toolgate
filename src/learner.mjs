@@ -18,18 +18,19 @@
  */
 import { tokenize } from "./text.mjs";
 
-export const DIM = 24;        // feature dimension (hashed task terms + bias)
+export const DIM = 128;       // feature dimension (hashed task terms); big enough to avoid collisions
 const ALPHA = 1.0;            // exploration scale on the confidence bonus
 
-/** Hash a task into a unit-norm feature vector. @param {string} task */
+/** Hash a task into a unit-norm feature vector over its content words.
+ *  No constant bias term on purpose: a bias dimension makes an arm's learning
+ *  leak into unrelated tasks (teach it for "email" and it creeps up for
+ *  "calendar"). Content-only features keep learning scoped to similar tasks. */
 export function featurize(task, dim = DIM) {
   const x = new Float64Array(dim);
-  x[dim - 1] = 1; // bias term
   for (const t of tokenize(task)) {
     let h = 2166136261;
     for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
-    const idx = Math.abs(h) % (dim - 1);
-    x[idx] += 1;
+    x[Math.abs(h) % dim] += 1;
   }
   let norm = 0; for (let i = 0; i < dim; i++) norm += x[i] * x[i];
   norm = Math.sqrt(norm) || 1;
@@ -64,7 +65,10 @@ export class Bandit {
 
   /** Predicted payoff (mean) and uncertainty (bonus) for a tool on a task. */
   score(tool, task) {
-    const d = this.dim, a = this.arm(tool), x = featurize(task, d);
+    const d = this.dim, x = featurize(task, d);
+    // Untrained arm: identity prior -> mean 0, full uncertainty. Skip allocating a matrix.
+    if (!this.arms[tool]) { return { mean: 0, bonus: ALPHA * Math.sqrt(dot(x, x, d)) }; }
+    const a = this.arm(tool);
     const theta = matVec(a.Ainv, a.b, d);
     const mean = dot(theta, x, d);
     const Ax = matVec(a.Ainv, x, d);

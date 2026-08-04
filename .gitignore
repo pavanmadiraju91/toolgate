@@ -3,5 +3,6 @@ node_modules/
 .DS_Store
 config/learned.json
 config/catalog.generated.json
+config/ignore.json
 eval/results/
 .env
