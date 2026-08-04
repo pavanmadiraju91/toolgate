@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Toolgate — decide what your agent harness carries</title>
+<meta name="description" content="Toolgate makes an agent harness's tool-loading decision visible, steerable, and self-learning." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper:#fff; --ink:#17181a; --ink2:#3f4247; --muted:#74777d; --faint:#a6a9af;
+    --line:#e9e9e6; --fit:#1f8f5f; --foot:#c2691f;
+    --disp:"Hanken Grotesk",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--disp);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:64px 24px 96px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--foot)}
+  h1{font-size:34px;font-weight:700;letter-spacing:-0.025em;line-height:1.12;margin:16px 0 0}
+  .lede{font-size:18px;color:var(--ink2);margin:18px 0 0}
+  .legend{display:flex;flex-wrap:wrap;gap:20px;margin:24px 0 0;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:8px}
+  .legend i{width:20px;height:4px;border-radius:2px}
+  .legend .g i{background:var(--fit)} .legend .a i{background:var(--foot)}
+  figure{margin:36px 0 0}
+  figure img{width:100%;border:1px solid var(--line);border-radius:12px;display:block}
+  figcaption{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:10px;text-align:center}
+  h2{font-size:14px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:52px 0 14px;font-weight:500}
+  p{margin:0 0 16px}
+  .terms{border:1px solid var(--line);border-radius:12px;padding:6px 20px;margin:0}
+  .terms div{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .terms div:last-child{border-bottom:0}
+  .terms b{font-family:var(--mono);font-weight:500;min-width:96px}
+  .terms .fit b{color:var(--fit)} .terms .foot b{color:var(--foot)}
+  ul{margin:0;padding:0;list-style:none}
+  li{padding:12px 0 12px 22px;position:relative;border-top:1px solid var(--line)}
+  li:first-child{border-top:0}
+  li::before{content:"";position:absolute;left:0;top:20px;width:8px;height:8px;border-radius:50%;background:var(--fit)}
+  li b{font-weight:600}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:36px}
+  .cta a{font-family:var(--mono);font-size:13px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:10px 16px;color:var(--ink)}
+  .cta a.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .cta a:hover{border-color:var(--muted)}
+  code{font-family:var(--mono);font-size:13px;background:#f6f6f4;border:1px solid var(--line);padding:1px 6px;border-radius:5px}
+  footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);color:var(--faint);font-size:13px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="kicker">Agent harness · tool loadout</div>
+    <h1>Decide what your agent actually carries.</h1>
+    <p class="lede">An agent harness connects to a lot of tools, then loads all of them into the model's context on every turn, whether the task needs them or not. Toolgate weighs each tool's <b>fit</b> to the task against the <b>footprint</b> it takes, boards what earns its place, and holds the rest at the gate. The whole decision is visible, and you can change it in one click.</p>
+    <div class="legend">
+      <span class="a"><i></i>footprint — room in context</span>
+      <span class="g"><i></i>fit — match to the task</span>
+      <span>gate — where boarding stops</span>
+    </div>
+
+    <figure>
+      <img src="docs/panel.png" alt="The Toolgate panel: tools for a task ranked by fit against footprint, a gate line, and board/hold controls." />
+      <figcaption>One task, weighed. Four tools board; the rest are held below the gate.</figcaption>
+    </figure>
+
+    <h2>What it's for</h2>
+    <ul>
+      <li><b>Cut the bloat.</b> Fewer tool definitions in context means faster, cheaper, sharper responses. In the demo, most tasks load 1–4 tools instead of a hundred-plus.</li>
+      <li><b>Keep the human in the loop.</b> An agent harness normally decides its tools invisibly. Toolgate shows the choice, and why, so you can board or hold anything yourself.</li>
+      <li><b>Learn, don't nag.</b> Your board/hold choices train it. A tool you keep boarding for a kind of task starts clearing the gate on its own.</li>
+    </ul>
+
+    <h2>How it works</h2>
+    <div class="terms">
+      <div class="fit"><b>fit</b><span>how well a tool matches the task (0 to 1)</span></div>
+      <div class="foot"><b>footprint</b><span>the room it takes in context: its schema size, plus a nudge for slow or risky tools</span></div>
+      <div><b>worth</b><span>fit minus footprint. Board it while it's still worth the room; stop at the gate.</span></div>
+    </div>
+    <p style="margin-top:16px">When the last tool boarded and the first tool held are nearly tied, Toolgate says it's unsure and holds a wider set instead of faking confidence. Under the hood, board/hold trains a small per-tool contextual bandit, so the harness gets better at your work over time.</p>
+
+    <h2>How it plugs in</h2>
+    <p>Toolgate runs as a single MCP server that exposes two tools: <code>find_tools(task)</code> and <code>run_tool(...)</code>. The harness registers only Toolgate, so its visible tool list stays two tools wide while the real decision happens inside, where it can be seen and overruled. Works with opencode, Codex, Gemini CLI, Claude Code, or any MCP client.</p>
+
+    <div class="cta">
+      <a class="primary" href="https://github.com/pavanmadiraju91/toolgate">View the code</a>
+      <a href="https://github.com/pavanmadiraju91/toolgate/blob/main/docs/01-problem.md">The problem</a>
+      <a href="https://github.com/pavanmadiraju91/toolgate/blob/main/docs/02-design.md">The design</a>
+      <a href="https://github.com/pavanmadiraju91/toolgate/blob/main/docs/03-eval.md">The eval</a>
+    </div>
+
+    <footer>A design study, built as a working prototype: making an agent harness's tool decisions legible, steerable, and self-learning.</footer>
+  </div>
+</body>
+</html>

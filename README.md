@@ -1,6 +1,6 @@
 # Toolgate
 
-**See what an agent is cleared to carry, and change it.** Toolgate is a small layer between a coding agent and its pile of connected tools. Before the agent starts a task, it weighs each tool's *fit* against the *footprint* it takes in context, boards the ones that earn their place, and holds the rest at the gate. You can see every call, overrule any of it in one gesture, and it learns from what you do.
+**See what an agent is cleared to carry, and change it.** Toolgate is a small layer inside the agent harness, between the agent and its pile of connected tools. Before the agent starts a task, it weighs each tool's *fit* against the *footprint* it takes in context, boards the ones that earn their place, and holds the rest at the gate. You can see every call, overrule any of it in one gesture, and it learns from what you do.
 
 ![The Toolgate panel: a task with tools ranked by fit against footprint, a gate line, and board/hold controls](docs/panel.png)
 
