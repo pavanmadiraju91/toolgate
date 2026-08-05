@@ -16,6 +16,7 @@ Toolgate is a design-study prototype: an MCP broker that ranks/shortlists an age
 - `npm run catalog` — connect to real MCP servers and generate `config/catalog.generated.json`. Requires the SDK installed and reachable servers.
 - `npm run broker` — run the MCP broker on stdio (what opencode connects to).
 - `npm run broker-http` — same broker over MCP Streamable HTTP at `http://127.0.0.1:7800/mcp` (for URL-based connectors like SAP Joule). `PORT` overrides the port; `TOOLGATE_TOKEN` requires `Authorization: Bearer <token>`. Needs a public HTTPS tunnel for hosted clients.
+- `npm run health` — connect to every configured MCP server and call `tools/list` (side-effect free); reports UP/DOWN + tool count per server.
 
 ## Architecture entrypoints
 - `src/ranker.mjs` `decide(task, catalog, config, overrides, bandit, stopPolicy)` is the core; every CLI calls it.
