@@ -34,6 +34,8 @@ const catalogPath = existsSync(generated) ? generated : join(root, "config", "ca
 const catalog = loadCatalog(catalogPath);
 const config = JSON.parse(readFileSync(join(root, "config", "toolgate.config.json"), "utf8"));
 const bandit = loadBandit(join(root, "config", "learned.json"));
+const stopPolicyPath = join(root, "config", "stop-policy.json");
+const stopPolicy = existsSync(stopPolicyPath) ? JSON.parse(readFileSync(stopPolicyPath, "utf8")) : null;
 const pool = new ClientPool(readServers());
 
 async function main() {
@@ -78,7 +80,7 @@ async function main() {
     const { name, arguments: a } = req.params;
 
     if (name === "find_tools") {
-      const record = decide(a.task, catalog, config, {}, bandit);
+      const record = decide(a.task, catalog, config, {}, bandit, stopPolicy);
       const view = record.chosen.map((c) => ({
         server: c.tool.server,
         tool: c.tool.tool || c.tool.name,

@@ -10,6 +10,10 @@
   "scripts": {
     "demo": "node src/demo.mjs",
     "learn": "node src/learn.mjs",
+    "mine": "node src/mine-history.mjs",
+    "label": "node src/label-required.mjs",
+    "dataset": "node src/eval-dataset.mjs",
+    "train-stop": "node src/train-stop.mjs",
     "catalog": "node src/gen-catalog.mjs",
     "panel": "node src/serve-panel.mjs",
     "broker": "node src/broker.mjs"

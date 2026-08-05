@@ -90,6 +90,7 @@
       <div><b>worth</b><span>fit minus footprint. Board it while it's still worth the room; stop at the gate.</span></div>
     </div>
     <p style="margin-top:16px">When the last tool boarded and the first tool held are nearly tied, Toolgate says it's unsure and holds a wider set instead of faking confidence. Under the hood, board/hold trains a small per-tool contextual bandit, so the harness gets better at your work over time.</p>
+    <p style="margin-top:16px"><b>How many to carry</b> is a learned, cost-aware stop, trained and evaluated on real tasks mined from actual agent history (Claude Code + opencode), not synthetic data.</p>
 
     <h2>How it plugs in</h2>
     <p>Toolgate runs as a single MCP server that exposes two tools: <code>find_tools(task)</code> and <code>run_tool(...)</code>. The harness registers only Toolgate, so its visible tool list stays two tools wide while the real decision happens inside, where it can be seen and overruled. Works with opencode, Codex, Gemini CLI, Claude Code, or any MCP client.</p>

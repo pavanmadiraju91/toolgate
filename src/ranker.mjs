@@ -20,6 +20,7 @@
  * and stop at the gate. Record where the line landed and how sure we are.
  */
 import { tokenize, termFreq, cosine } from "./text.mjs";
+import { stopDepth } from "./stoppolicy.mjs";
 
 // ---------------------------------------------------------------------------
 // Fit (swappable)
@@ -95,8 +96,10 @@ export const DEFAULT_CONFIG = {
  * @param {Partial<RankConfig>} [overrides]
  * @param {{ pin?:string[], exclude?:string[] }} [userOverrides]
  * @param {import('./learner.mjs').Bandit|null} [bandit] learned preferences
+ * @param {object|null} [stopPolicy] learned cost-aware stop policy (from train-stop). When present it
+ *   chooses the acquisition depth instead of the fixed worth floor.
  */
-export function decide(task, catalog, overrides = {}, userOverrides = {}, bandit = null) {
+export function decide(task, catalog, overrides = {}, userOverrides = {}, bandit = null, stopPolicy = null) {
   const cfg = { ...DEFAULT_CONFIG, ...overrides, weights: { ...DEFAULT_CONFIG.weights, ...(overrides.weights || {}) } };
   const fitFn = cfg.fit || lexicalFit;
   const pinned = new Set(userOverrides.pin || []);
@@ -126,9 +129,29 @@ export function decide(task, catalog, overrides = {}, userOverrides = {}, bandit
     return b.worth - a.worth;
   });
 
-  // 3. Walk the ranking and find the gate line.
+  // 3. Choose which prefix to board. With a learned stop policy, the cutoff is
+  //    decided by the trained cost-aware model; otherwise fall back to the
+  //    fixed worth floor. Pins/excludes and min/max guardrails apply either way.
   const chosen = [], rejected = [];
   let spent = 0, stopReason = "exhausted-catalog", cutoffWorth = null, firstRejectedWorth = null;
+
+  if (stopPolicy) {
+    const scores = scored.map((s) => s.fit);
+    const rawCosts = scored.map((s) => s.footprint.schemaTokens);
+    const meanC = rawCosts.reduce((a, b) => a + b, 0) / (rawCosts.length || 1) || 1;
+    const costs = rawCosts.map((c) => c / meanC); // match the mean-1 cost scale the policy trained on
+    const depth = stopDepth(stopPolicy, scores, costs, stopPolicy.lambda ?? 0.12, stopPolicy.gate ?? 0.5);
+    scored.forEach((s, i) => {
+      const isPinned = pinned.has(s.tool.name);
+      const isExcluded = excluded.has(s.tool.name);
+      let include = isExcluded ? false : isPinned ? true : i < depth;
+      if (include && chosen.length >= cfg.maxTools && !isPinned) include = false;
+      if (!include && !isExcluded && chosen.length < cfg.minTools) include = true; // never starve
+      if (include) { chosen.push({ ...s, reason: isPinned ? "user-pinned" : (s.learned > 0.02 ? "learned" : "boarded") }); spent += s.footprint.schemaTokens; }
+      else rejected.push({ ...s, reason: isExcluded ? "user-excluded" : "beyond-stop" });
+    });
+    stopReason = "learned-stop";
+  } else {
   for (const s of scored) {
     const isPinned = pinned.has(s.tool.name);
     if (excluded.has(s.tool.name)) { rejected.push({ ...s, reason: "user-excluded" }); continue; }
@@ -155,6 +178,7 @@ export function decide(task, catalog, overrides = {}, userOverrides = {}, bandit
       if (firstRejectedWorth === null) firstRejectedWorth = s.worth;
       rejected.push({ ...s, reason: stopReason });
     }
+  }
   }
 
   // 4. Confidence in the gate line: a narrow worth-gap = an arbitrary cut, so

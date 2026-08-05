@@ -51,6 +51,21 @@ Every tool earns its place through one legible tradeoff:
 
 Toolgate ranks tools best-fit first and keeps boarding while each is still worth it. When the next one isn't, it draws the **gate line** and stops. A relevance floor keeps cheap-but-irrelevant tools from sneaking in just because they're small. Then it reports how confident it is: if the last tool boarded and the first tool held are nearly tied, it says so and widens the set rather than faking certainty.
 
+### How many to load: a learned, cost-aware stop
+
+A ranking tells you the *order* of tools, not *how many* to take, and a score threshold picks the cutoff badly once tools cost different amounts of context — a cheap useless tool and an expensive essential one can't be split by a score line. So the stop is **learned**, not a fixed floor.
+
+This is the part I'm most pleased with. At each candidate depth Toolgate computes the payoff `sufficiency − λ·Σcost` and the *gap* `Δ` between stopping now and the best it could still do by continuing. The sign of `Δ` is the stop label; its magnitude `|Δ|+ε` (ε=1e-4) weights each error by the payoff at stake — so a mistake that costs a lot of payoff matters more than one that barely moves the needle. A regret-weighted, ℓ2-regularized logistic model learns to stop from ten deployment-visible features (marginal score-cost and prefix-progress signals, never the answer key), and the gate is tuned on validation payoff. `src/stoppolicy.mjs:features` documents the mapping; a regret-identity check runs at train time (`max|err|=0`) to confirm the training target and the payoff stay in sync.
+
+**Trained and evaluated on real tasks, not synthetic ones.** `npm run mine` mines my actual agent history (Claude Code + opencode), `npm run label` recovers each task's required-tool set `G_x` (LLM judge, primary; consumption heuristic, cross-check), and `npm run train-stop` trains the stop on a held-out split. On 126 mined tasks (candidates scoped per task to the servers it touched, ~18 on average; real schema-token costs → heterogeneous), against the deployable baselines:
+
+| λ (cost pressure) | learned stop | score threshold | score-per-cost | full access | oracle |
+|---|:---:|:---:|:---:|:---:|:---:|
+| 0.12 | **0.288** (52% suff) | 0.240 | 0.240 | −1.48 | 0.466 |
+| 0.20 | 0.217 | 0.240 | 0.240 | −3.14 | 0.389 |
+
+(mean test payoff, higher is better). At moderate pressure the learned stop clearly wins: the score-only baselines collapse to acquiring *nothing* — once tools cost different amounts, a single score line can't separate a cheap-useless tool from an expensive-essential one — while the learned stop acquires ~2 tools and doubles sufficiency. Under high pressure with Toolgate's weak lexical ranker, acquiring the *right* tools is hard, so it slightly over-acquires and trails the trivial "take nothing" line — an honest limit that tracks the ranker, not the stop rule (it clears comfortably on the synthetic `--synthetic` regime with clean scores). See [`docs/03-eval.md`](docs/03-eval.md) for the mining/labeling methodology and caveats.
+
 ### It learns from you
 
 Board a tool it held, or hold one it boarded, and Toolgate remembers. Under the hood that's a LinUCB contextual bandit: one small linear model per tool over the words in the task, trained on your board (reward 1) and hold (reward 0) choices. I used a bandit rather than a hand-rolled heuristic because it's the standard answer for learning to shortlist from thumbs-up/thumbs-down feedback: it handles cold start, needs few examples, stays readable, and its uncertainty term feeds the same "unsure, so widen" behavior above. Keep boarding a tool for a kind of task and it starts clearing the gate on its own. `npm run learn` shows exactly that.
@@ -67,6 +82,11 @@ The catalog isn't hand-written. `npm run catalog` reads your opencode MCP config
 
 ```
 src/ranker.mjs      the shortlist engine (fit x footprint -> worth -> gate line)
+src/stoppolicy.mjs  learned cost-aware stop (regret-weighted logistic over prefixes)
+src/mine-history.mjs   CLI: mine real tasks from Claude Code + opencode history
+src/label-required.mjs CLI: recover each task's required set G_x (LLM judge + heuristic)
+src/eval-dataset.mjs   turn labeled tasks into ranked {scores,costs,requiredMask} tuples
+src/train-stop.mjs  CLI: train the stop on real history (or --synthetic) + baselines
 src/learner.mjs     LinUCB contextual bandit; learns from board/hold feedback
 src/text.mjs        shared tokenizer so the ranker and learner agree on features
 src/broker.mjs      the MCP server: find_tools + run_tool
@@ -78,6 +98,7 @@ src/demo.mjs        CLI: run tasks, write a decision record for the panel
 src/learn.mjs       CLI: watch a held tool learn to board itself
 panel/index.html    the legibility and control UI (zero build, served locally)
 config/             sample catalog + the policy (lambda, floors, weights)
+eval/history/       mined + labeled real tasks (gitignored — private session text)
 docs/               the case study: 01-problem, 02-design, 03-eval
 ```
 
@@ -102,7 +123,7 @@ To actually shrink context, run an agent that carries only Toolgate instead of e
 
 ## Limitations
 
-The default fit score is plain lexical matching so the repo runs with zero setup. It misses synonyms ("design files" doesn't match a Figma tool), and that shows up in the eval. Swapping in real embeddings is a one-function change. Confidence measures how clean the gate cut was, not whether fit got the answer, so it can be confidently wrong. That's exactly why board/hold and the learner are first-class. Catalog generation also depends on each server being reachable at build time; ones that need an app running or interactive auth are skipped with a warning. [`docs/03-eval.md`](docs/03-eval.md) has the numbers, the failure cases, and what I'd do next.
+The default fit score is plain lexical matching so the repo runs with zero setup. It misses synonyms ("design files" doesn't match a Figma tool), and that shows up in the eval. Swapping in real embeddings is a one-function change. Confidence measures how clean the gate cut was, not whether fit got the answer, so it can be confidently wrong. That's exactly why board/hold and the learner are first-class. The stop policy is trained on synthetic labeled tasks (required sets known offline); on a real, annotated task set it would be calibrated the same way, but the numbers above come from the synthetic set. Catalog generation also depends on each server being reachable at build time; ones that need an app running or interactive auth are skipped with a warning. [`docs/03-eval.md`](docs/03-eval.md) has the numbers, the failure cases, and what I'd do next.
 
 ## Read more
 

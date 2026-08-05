@@ -5,4 +5,6 @@ config/learned.json
 config/catalog.generated.json
 config/ignore.json
 eval/results/
+# mined agent history — contains private task text from real sessions; never commit
+eval/history/
 .env
