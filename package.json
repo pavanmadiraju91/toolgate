@@ -16,7 +16,8 @@
     "train-stop": "node src/train-stop.mjs",
     "catalog": "node src/gen-catalog.mjs",
     "panel": "node src/serve-panel.mjs",
-    "broker": "node src/broker.mjs"
+    "broker": "node src/broker.mjs",
+    "broker-http": "node src/broker-http.mjs"
   },
   "keywords": [
     "human-agent-interaction",

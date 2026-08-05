@@ -15,6 +15,11 @@
  * Catalog: uses config/catalog.generated.json if present (run `npm run catalog`
  * to build it from your real servers), otherwise the bundled sample.
  *
+ * Transports:
+ *   node src/broker.mjs        stdio  (opencode, Claude Code, Codex, Gemini CLI)
+ *   node src/broker-http.mjs   HTTP   (SAP Joule and other URL-based connectors)
+ * Both share buildServer()/loadDeps() below.
+ *
  * Run:  npm install @modelcontextprotocol/sdk && node src/broker.mjs
  */
 import { readFileSync, existsSync } from "node:fs";
@@ -29,50 +34,64 @@ import { ClientPool } from "./mcpClients.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 
-const generated = join(root, "config", "catalog.generated.json");
-const catalogPath = existsSync(generated) ? generated : join(root, "config", "catalog.example.json");
-const catalog = loadCatalog(catalogPath);
-const config = JSON.parse(readFileSync(join(root, "config", "toolgate.config.json"), "utf8"));
-const bandit = loadBandit(join(root, "config", "learned.json"));
-const stopPolicyPath = join(root, "config", "stop-policy.json");
-const stopPolicy = existsSync(stopPolicyPath) ? JSON.parse(readFileSync(stopPolicyPath, "utf8")) : null;
-const pool = new ClientPool(readServers());
+/** Load catalog, policy, bandit, and the downstream client pool once. */
+export function loadDeps() {
+  const generated = join(root, "config", "catalog.generated.json");
+  const catalogPath = existsSync(generated) ? generated : join(root, "config", "catalog.example.json");
+  const catalog = loadCatalog(catalogPath);
+  const config = JSON.parse(readFileSync(join(root, "config", "toolgate.config.json"), "utf8"));
+  const bandit = loadBandit(join(root, "config", "learned.json"));
+  const stopPolicyPath = join(root, "config", "stop-policy.json");
+  const stopPolicy = existsSync(stopPolicyPath) ? JSON.parse(readFileSync(stopPolicyPath, "utf8")) : null;
+  const pool = new ClientPool(readServers());
+  return { catalog, config, bandit, stopPolicy, pool, catalogPath };
+}
 
-async function main() {
-  let Server, StdioServerTransport, types;
+export async function importSdk() {
   try {
-    ({ Server } = await import("@modelcontextprotocol/sdk/server/index.js"));
-    ({ StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js"));
-    types = await import("@modelcontextprotocol/sdk/types.js");
+    const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+    const types = await import("@modelcontextprotocol/sdk/types.js");
+    return { Server, types };
   } catch {
     console.error("\n[toolgate] MCP SDK not installed. Run: npm install @modelcontextprotocol/sdk\n");
     process.exit(1);
   }
+}
+
+const META_TOOLS = [
+  {
+    name: "find_tools",
+    description:
+      "Get a short, explained list of the tools worth loading for a task. " +
+      "Returns only what earns its place in context, with a reason for each " +
+      "pick. Call this before work that may need external tools.",
+    inputSchema: { type: "object", properties: { task: { type: "string", description: "What you are trying to do." } }, required: ["task"] },
+  },
+  {
+    name: "run_tool",
+    description:
+      "Invoke one of the tools surfaced by find_tools. Pass its server, tool " +
+      "name, and arguments; Toolgate forwards the call to that server.",
+    inputSchema: {
+      type: "object",
+      properties: { server: { type: "string" }, tool: { type: "string" }, args: { type: "object" } },
+      required: ["server", "tool"],
+    },
+  },
+];
+
+/**
+ * Build a fully-wired Toolgate MCP Server (the two meta-tools + handlers).
+ * Shared by every transport. A fresh Server can be built per HTTP request.
+ * @param {ReturnType<typeof loadDeps>} deps
+ * @param {{Server:any, types:any}} sdk
+ */
+export function buildServer(deps, sdk) {
+  const { catalog, config, bandit, stopPolicy, pool } = deps;
+  const { Server, types } = sdk;
   const { ListToolsRequestSchema, CallToolRequestSchema } = types;
 
   const server = new Server({ name: "toolgate", version: "0.1.0" }, { capabilities: { tools: {} } });
-
-  const META_TOOLS = [
-    {
-      name: "find_tools",
-      description:
-        "Get a short, explained list of the tools worth loading for a task. " +
-        "Returns only what earns its place in context, with a reason for each " +
-        "pick. Call this before work that may need external tools.",
-      inputSchema: { type: "object", properties: { task: { type: "string", description: "What you are trying to do." } }, required: ["task"] },
-    },
-    {
-      name: "run_tool",
-      description:
-        "Invoke one of the tools surfaced by find_tools. Pass its server, tool " +
-        "name, and arguments; Toolgate forwards the call to that server.",
-      inputSchema: {
-        type: "object",
-        properties: { server: { type: "string" }, tool: { type: "string" }, args: { type: "object" } },
-        required: ["server", "tool"],
-      },
-    },
-  ];
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: META_TOOLS }));
 
@@ -112,8 +131,19 @@ async function main() {
     throw new Error(`Unknown tool: ${name}`);
   });
 
-  await server.connect(new StdioServerTransport());
-  console.error(`[toolgate] broker on stdio · catalog: ${catalogPath.split("/").pop()} · ${catalog.length} tools`);
+  return server;
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+async function main() {
+  const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+  const deps = loadDeps();
+  const sdk = await importSdk();
+  const server = buildServer(deps, sdk);
+  await server.connect(new StdioServerTransport());
+  console.error(`[toolgate] broker on stdio · catalog: ${deps.catalogPath.split("/").pop()} · ${deps.catalog.length} tools`);
+}
+
+// Only run stdio when invoked directly (not when imported by broker-http.mjs).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

@@ -15,11 +15,12 @@ Toolgate is a design-study prototype: an MCP broker that ranks/shortlists an age
 - **Eval-set mining pipeline** (feeds `train-stop`): `npm run mine` → `eval/history/traces.jsonl` (parses Claude Code JSONL incl. subagent sidechains + opencode SQLite); `npm run label -- --judge opencode` → `eval/history/labeled.jsonl` (LLM judge for required set `G_x`, needs a working `opencode run` model — `anthropic/claude-opus-4-8-fast` works; sonnet/haiku hit a provider bug on some accounts); `npm run label` alone = zero-dep M3 heuristic only; `npm run dataset` prints dataset stats.
 - `npm run catalog` — connect to real MCP servers and generate `config/catalog.generated.json`. Requires the SDK installed and reachable servers.
 - `npm run broker` — run the MCP broker on stdio (what opencode connects to).
+- `npm run broker-http` — same broker over MCP Streamable HTTP at `http://127.0.0.1:7800/mcp` (for URL-based connectors like SAP Joule). `PORT` overrides the port; `TOOLGATE_TOKEN` requires `Authorization: Bearer <token>`. Needs a public HTTPS tunnel for hosted clients.
 
 ## Architecture entrypoints
 - `src/ranker.mjs` `decide(task, catalog, config, overrides, bandit, stopPolicy)` is the core; every CLI calls it.
 - `src/stoppolicy.mjs` is the learned cost-aware stop. `features()` is the fixed 10-feature map (marginal score-cost + prefix-progress) — don't "simplify" it away; the ranker and training both depend on it. `buildExamples()` builds the regret-weighted training set (`ε=1e-4`).
-- `src/broker.mjs` exposes exactly two MCP tools: `find_tools` and `run_tool`. `run_tool` forwards to real downstream servers via `src/mcpClients.mjs`.
+- `src/broker.mjs` exposes exactly two MCP tools: `find_tools` and `run_tool`. `run_tool` forwards to real downstream servers via `src/mcpClients.mjs`. `buildServer()`/`loadDeps()` are shared with `src/broker-http.mjs` (Streamable HTTP transport, stateless, for URL connectors); `broker.mjs` only runs stdio when invoked directly (import.meta.url guard).
 - `src/text.mjs` is the shared tokenizer — the ranker and `src/learner.mjs` (LinUCB bandit) must agree on features, so change tokenization here only.
 - Eval-mining seam: `src/mine-history.mjs` (harness → traces) → `src/label-required.mjs` (traces → labeled `G_x`) → `src/eval-dataset.mjs` (labeled → ranked `{scores,costs,requiredMask}`, candidates **scoped per task to the servers it touched**) → `src/train-stop.mjs`.
 - File map is documented in `README.md` under "Architecture".
