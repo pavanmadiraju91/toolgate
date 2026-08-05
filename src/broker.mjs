@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadCatalog } from "./catalog.mjs";
 import { decide } from "./ranker.mjs";
+import { semanticFitFor, saveCache } from "./embeddings.mjs";
 import { loadBandit } from "./prefs.mjs";
 import { readServers } from "./mcpConfig.mjs";
 import { ClientPool } from "./mcpClients.mjs";
@@ -99,7 +100,14 @@ export function buildServer(deps, sdk) {
     const { name, arguments: a } = req.params;
 
     if (name === "find_tools") {
-      const record = decide(a.task, catalog, config, {}, bandit, stopPolicy);
+      // Semantic fit (embeddings) when available; falls back to lexical inside decide().
+      const fit = await semanticFitFor(catalog, a.task);
+      saveCache();
+      // Default: return the relevant shortlist (semantic top-k above the relevance
+      // floor) — the useful thing to hand an LLM. Set TOOLGATE_STOP=1 to instead
+      // apply the learned cost-aware stop (minimal single-prefix acquisition).
+      const useStop = process.env.TOOLGATE_STOP === "1";
+      const record = decide(a.task, catalog, fit ? { ...config, fit } : config, {}, bandit, useStop ? stopPolicy : null);
       const view = record.chosen.map((c) => ({
         server: c.tool.server,
         tool: c.tool.tool || c.tool.name,

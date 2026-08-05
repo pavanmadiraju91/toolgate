@@ -8,3 +8,4 @@ eval/results/
 # mined agent history — contains private task text from real sessions; never commit
 eval/history/
 .env
+config/embeddings.cache.json

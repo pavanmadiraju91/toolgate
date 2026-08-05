@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadCatalog } from "./catalog.mjs";
 import { lexicalFit, toolFootprint } from "./ranker.mjs";
+import { semanticFitFor, saveCache } from "./embeddings.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -37,9 +38,9 @@ export function loadCatalogDefault() {
  * @param {import('./catalog.mjs').Tool[]} candidates  candidate tools for this task
  * @param {{latency:number,risk:number}} weights
  */
-export function buildRankedTask(task, requiredNames, candidates, weights = { latency: 0, risk: 0 }) {
+export function buildRankedTask(task, requiredNames, candidates, fitFn = lexicalFit, weights = { latency: 0, risk: 0 }) {
   const rows = candidates.map((t) => ({
-    score: lexicalFit(task, t),
+    score: fitFn(task, t),
     rawCost: toolFootprint(t, weights).schemaTokens,
     required: requiredNames.has(`${t.server}.${t.tool}`),
   }));
@@ -58,9 +59,11 @@ export function buildRankedTask(task, requiredNames, candidates, weights = { lat
  * A task's required tools live in those servers, so sufficiency is attainable and
  * the stopping tradeoff is real — unlike ranking against a 105-tool global
  * catalog where required tools sink to the middle of the list.
+ * Scores use the same fit as the broker: semantic embeddings when available,
+ * lexical otherwise — so the policy trains on the score distribution it serves.
  * @returns {{tasks:object[], stats:object}}
  */
-export function loadHistoryDataset(opts = {}) {
+export async function loadHistoryDataset(opts = {}) {
   const catalog = opts.catalog || loadCatalogDefault();
   const byServer = new Map();
   for (const t of catalog) { if (!byServer.has(t.server)) byServer.set(t.server, []); byServer.get(t.server).push(t); }
@@ -69,22 +72,25 @@ export function loadHistoryDataset(opts = {}) {
   const labeled = readFileSync(labeledPath, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
   const tasks = [];
-  let dropped = 0, emptyReq = 0;
+  let dropped = 0, emptyReq = 0, semantic = 0;
   for (const row of labeled) {
     const required = new Set((row.required || []).filter((n) => typeof n === "string"));
     if (!row.taskText || row.taskText.length < 8) { dropped++; continue; }
     const servers = (row.knownServers && row.knownServers.length) ? row.knownServers : [...byServer.keys()];
     const candidates = servers.flatMap((s) => byServer.get(s) || []);
     if (candidates.length < 2) { dropped++; continue; } // need a real stop decision
-    const t = buildRankedTask(row.taskText, required, candidates);
+    const fitFn = (await semanticFitFor(candidates, row.taskText)) || lexicalFit;
+    if (fitFn !== lexicalFit) semantic++;
+    const t = buildRankedTask(row.taskText, required, candidates, fitFn);
     const nReq = t.requiredMask.filter(Boolean).length;
     if (nReq === 0) emptyReq++;                    // task needed no catalog tool (valid: stop at 0)
     tasks.push({ ...t, taskId: row.taskId, source: row.source, nRequired: nReq, nCandidates: candidates.length, labelMethod: row.labelMethod });
   }
+  saveCache();
   return {
     tasks,
     stats: {
-      n: tasks.length, dropped, emptyReq,
+      n: tasks.length, dropped, emptyReq, fit: semantic === tasks.length ? "semantic" : semantic ? "mixed" : "lexical",
       meanRequired: +(tasks.reduce((s, t) => s + t.nRequired, 0) / (tasks.length || 1)).toFixed(2),
       meanCandidates: +(tasks.reduce((s, t) => s + t.nCandidates, 0) / (tasks.length || 1)).toFixed(1),
       catalogSize: catalog.length,
@@ -94,7 +100,7 @@ export function loadHistoryDataset(opts = {}) {
 
 // CLI: print dataset stats
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { tasks, stats } = loadHistoryDataset();
+  const { tasks, stats } = await loadHistoryDataset();
   console.log("History dataset:", JSON.stringify(stats, null, 2));
   const withReq = tasks.filter((t) => t.nRequired > 0).length;
   console.log(`tasks with >=1 required tool: ${withReq}/${tasks.length}`);

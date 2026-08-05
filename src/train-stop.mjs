@@ -62,8 +62,8 @@ function makeSyntheticSplits(hetero) {
 
 // ---- real history splits (default) -----------------------------------------
 function shuffle(a) { const x = a.slice(); for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; }
-function loadRealSplits() {
-  const { tasks, stats } = loadHistoryDataset({ catalog });
+async function loadRealSplits() {
+  const { tasks, stats } = await loadHistoryDataset({ catalog });
   const shuffled = shuffle(tasks);
   const nTest = Math.max(1, Math.round(shuffled.length * 0.2));
   const nVal = Math.max(1, Math.round(shuffled.length * 0.2));
@@ -175,7 +175,7 @@ if (SYNTHETIC) {
   const hi = run("synthetic heterogeneous, high pressure", makeSyntheticSplits(true), 0.20);
   writeFileSync(join(root, "config", "stop-policy.json"), JSON.stringify({ ...hi, source: "synthetic" }, null, 2));
 } else {
-  splits = loadRealSplits();
+  splits = await loadRealSplits();
   mode = "REAL history";
   console.log(`Training on REAL mined history. Dataset: ${JSON.stringify(splits.stats)}`);
   console.log(`Splits: train=${splits.train.length} val=${splits.val.length} test=${splits.test.length} (real footprints => inherently heterogeneous costs)`);
