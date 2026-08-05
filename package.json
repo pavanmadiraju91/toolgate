@@ -29,6 +29,7 @@
   "license": "MIT",
   "optionalDependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "pino": "^10.3.1"
   }
 }

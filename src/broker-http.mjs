@@ -69,6 +69,6 @@ const httpServer = createServer(async (req, res) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.error(`[toolgate] HTTP broker on http://127.0.0.1:${PORT}${MCP_PATH} · ${deps.catalog.length} tools${TOKEN ? " · bearer-token required" : ""}`);
+  console.error(`[toolgate] HTTP broker on http://127.0.0.1:${PORT}${MCP_PATH} · ${deps.catalog.length} tools${TOKEN ? " · bearer-token required" : ""} · log: ${deps.logPath}`);
   console.error(`[toolgate] For Joule: expose this with a public HTTPS tunnel and use <url>${MCP_PATH} as the connector URL.`);
 });

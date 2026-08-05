@@ -31,6 +31,7 @@ import { semanticFitFor, saveCache } from "./embeddings.mjs";
 import { loadBandit } from "./prefs.mjs";
 import { readServers } from "./mcpConfig.mjs";
 import { ClientPool } from "./mcpClients.mjs";
+import { createLogger } from "./logger.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -45,7 +46,9 @@ export function loadDeps() {
   const stopPolicyPath = join(root, "config", "stop-policy.json");
   const stopPolicy = existsSync(stopPolicyPath) ? JSON.parse(readFileSync(stopPolicyPath, "utf8")) : null;
   const pool = new ClientPool(readServers());
-  return { catalog, config, bandit, stopPolicy, pool, catalogPath };
+  const logPath = process.env.TOOLGATE_LOG || join(root, "eval", "history", "broker-log.jsonl");
+  const logger = createLogger(logPath);
+  return { catalog, config, bandit, stopPolicy, pool, catalogPath, logPath, logger };
 }
 
 export async function importSdk() {
@@ -115,6 +118,11 @@ export function buildServer(deps, sdk) {
         why: `fit ${c.fit.toFixed(2)}, ${c.reason}`,
         arguments: c.tool.schema || {},
       }));
+      deps.logger.info({
+        loaded: record.summary.loaded, total: record.summary.total,
+        pctSaved: record.summary.pctSaved, lowConfidence: record.summary.lowConfidence,
+        task: a.task, chosen: view.map((v) => `${v.server}.${v.tool}`),
+      }, "find_tools");
       return {
         content: [{
           type: "text",
@@ -128,10 +136,13 @@ export function buildServer(deps, sdk) {
     }
 
     if (name === "run_tool") {
+      const started = Date.now();
       try {
         const res = await pool.callTool(a.server, a.tool, a.args || {});
+        deps.logger.info({ server: a.server, tool: a.tool, ok: !res?.isError, ms: Date.now() - started }, "run_tool");
         return res; // pass the downstream tool's result straight through
       } catch (e) {
+        deps.logger.error({ server: a.server, tool: a.tool, ok: false, ms: Date.now() - started, error: String(e.message || e).slice(0, 200) }, "run_tool");
         return { isError: true, content: [{ type: "text", text: `[toolgate] ${a.server}.${a.tool} failed: ${String(e.message || e)}` }] };
       }
     }
@@ -148,7 +159,7 @@ async function main() {
   const sdk = await importSdk();
   const server = buildServer(deps, sdk);
   await server.connect(new StdioServerTransport());
-  console.error(`[toolgate] broker on stdio · catalog: ${deps.catalogPath.split("/").pop()} · ${deps.catalog.length} tools`);
+  console.error(`[toolgate] broker on stdio · catalog: ${deps.catalogPath.split("/").pop()} · ${deps.catalog.length} tools · log: ${deps.logPath}`);
 }
 
 // Only run stdio when invoked directly (not when imported by broker-http.mjs).
